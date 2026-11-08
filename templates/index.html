@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sensory Impact Navigation</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #fdf6ec;
+            background-image:
+                radial-gradient(circle, #e0c9a6 1px, transparent 1px);
+            background-size: 28px 28px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: #2b2d42;
+            color: #fdf6ec;
+            padding: 30px 0;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 0px #f4a261, 0 6px 16px rgba(0,0,0,0.25);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Puzzle piece decorations */
+        header::before {
+            content: '🧩 🧩 🧩 🧩 🧩 🧩 🧩 🧩 🧩 🧩 🧩 🧩';
+            position: absolute;
+            top: 6px;
+            left: 0;
+            right: 0;
+            font-size: 1.1em;
+            opacity: 0.12;
+            letter-spacing: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        header h1 {
+            font-family: 'Fredoka One', cursive;
+            font-size: 2.5em;
+            margin-bottom: 5px;
+            letter-spacing: 1px;
+            color: #f4a261;
+        }
+
+        header p {
+            font-size: 1.1em;
+            opacity: 0.85;
+        }
+
+        #map { 
+            height: 500px; 
+            margin-bottom: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 0 #c9a87c, 0 6px 20px rgba(0,0,0,0.12);
+            border: 3px solid #2b2d42;
+        }
+
+        form { 
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 0 #c9a87c, 0 6px 20px rgba(0,0,0,0.08);
+            border: 2px solid #2b2d42;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        form input {
+            flex: 1;
+            min-width: 200px;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            font-family: 'Nunito', sans-serif;
+            transition: border-color 0.3s;
+            background: #fdf6ec;
+        }
+
+        form input:focus {
+            outline: none;
+            border-color: #f4a261;
+        }
+
+        form button {
+            padding: 12px 25px;
+            background-color: #f4a261;
+            color: #2b2d42;
+            border: 2px solid #2b2d42;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-family: 'Fredoka One', cursive;
+            font-weight: normal;
+            letter-spacing: 0.5px;
+            transition: background-color 0.2s, transform 0.1s;
+            box-shadow: 0 3px 0 #2b2d42;
+        }
+
+        form button:hover {
+            background-color: #e8894a;
+            transform: translateY(-1px);
+        }
+
+        form button:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #2b2d42;
+        }
+
+        form button:last-child {
+            background-color: #e8e8e8;
+            color: #555;
+            border-color: #aaa;
+            box-shadow: 0 3px 0 #aaa;
+        }
+
+        form button:last-child:hover {
+            background-color: #d5d5d5;
+        }
+
+        /* About Section Styles */
+        .about-section {
+            background: white;
+            padding: 60px 20px;
+            margin-top: 60px;
+            border-top: 4px solid #f4a261;
+        }
+
+        .about-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .about-section h2 {
+            font-family: 'Fredoka One', cursive;
+            color: #2b2d42;
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            text-align: center;
+            letter-spacing: 1px;
+        }
+
+        .about-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .about-text h3 {
+            font-family: 'Fredoka One', cursive;
+            color: #2b2d42;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .about-text p {
+            color: #555;
+            line-height: 1.8;
+            margin-bottom: 15px;
+            font-size: 1.05em;
+        }
+
+        .icon {
+            font-size: 1.3em;
+        }
+
+        .how-it-works {
+            background-color: #fdf6ec;
+            padding: 30px;
+            border-radius: 12px;
+            margin-top: 30px;
+            border: 2px solid #e0c9a6;
+        }
+
+        .how-it-works h3 {
+            font-family: 'Fredoka One', cursive;
+            color: #2b2d42;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .step {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px solid #2b2d42;
+            box-shadow: 0 3px 0 #2b2d42;
+            transition: transform 0.15s;
+        }
+
+        .step:hover {
+            transform: translateY(-2px);
+        }
+
+        .step-number {
+            background: #f4a261;
+            color: #2b2d42;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Fredoka One', cursive;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            border: 2px solid #2b2d42;
+        }
+
+        .step h4 {
+            font-family: 'Fredoka One', cursive;
+            color: #2b2d42;
+            margin-bottom: 10px;
+            font-weight: normal;
+        }
+
+        .step p {
+            color: #666;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+
+        .noise-levels {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .noise-type {
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            font-family: 'Fredoka One', cursive;
+            font-size: 1em;
+            border: 2px solid #2b2d42;
+            box-shadow: 0 3px 0 #2b2d42;
+        }
+
+        .noise-high {
+            background-color: #e63946;
+            color: white;
+        }
+
+        .noise-medium {
+            background-color: #f4a261;
+            color: #2b2d42;
+        }
+
+        .noise-low {
+            background-color: #52b788;
+            color: white;
+        }
+
+        .mission {
+            background: #2b2d42;
+            color: #fdf6ec;
+            padding: 40px;
+            border-radius: 12px;
+            text-align: center;
+            margin-top: 40px;
+            border: 2px solid #2b2d42;
+            box-shadow: 0 5px 0 #f4a261;
+        }
+
+        .mission h3 {
+            font-family: 'Fredoka One', cursive;
+            font-size: 1.8em;
+            margin-bottom: 15px;
+            color: #f4a261;
+        }
+
+        .mission p {
+            font-size: 1.1em;
+            line-height: 1.8;
+        }
+
+        footer {
+            background-color: #2b2d42;
+            color: #fdf6ec;
+            text-align: center;
+            padding: 20px;
+            margin-top: 40px;
+            font-family: 'Fredoka One', cursive;
+            font-size: 1.05em;
+            letter-spacing: 0.5px;
+        }
+
+        @media (max-width: 768px) {
+            .about-content {
+                grid-template-columns: 1fr;
+            }
+
+            header h1 {
+                font-size: 1.8em;
+            }
+
+            .about-section h2 {
+                font-size: 1.8em;
+            }
+
+            form {
+                flex-direction: column;
+            }
+
+            form input,
+            form button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="container">
+        <h1>🧩 Sensory Impact Navigation</h1>
+        <p>Navigate through the quietest, most peaceful routes in your city</p>
+    </div>
+</header>
+
+<div class="container">
+    <form id="routeForm">
+        <input type="text" id="start" placeholder="Start location" required>
+        <input type="text" id="end" placeholder="End location" required>
+        <button type="submit">Navigate 🧩</button>
+        <button type="button" onclick="location.reload()">Clear</button>
+    </form>
+
+    <div id="demo"></div>
+    <div id="map"></div>
+</div>
+
+<!-- About Section -->
+<div class="about-section">
+    <div class="about-container">
+        <h2>🧩 About Sensory Impact Navigation</h2>
+        
+        <div class="about-content">
+            <div class="about-text">
+                <h3><span class="icon">🎯</span> Why We Exist</h3>
+                <p>
+                    Modern navigation apps prioritize speed and distance, but they ignore something that affects our mental health, productivity, and wellbeing: <strong>noise pollution</strong>.
+                </p>
+                <p>
+                    Studies show that continuous exposure to high noise levels causes stress, fatigue, and long-term health issues. Sensory Impact Navigation changes that by helping you find routes that preserve your peace of mind.
+                </p>
+                <p>
+                    Whether you're commuting to work, going for a walk, or exploring your city, you deserve to travel through quieter, more pleasant environments.
+                </p>
+            </div>
+
+            <div class="about-text">
+                <h3><span class="icon">⚡</span> How It Works</h3>
+                <p>
+                    We've integrated real-time OpenStreetMap data with intelligent noise analysis to find the best route for you. The street network we download is automatically sized to your journey — so whether you're crossing a neighbourhood or a whole city, you always get complete coverage.
+                </p>
+                <p>
+                    <strong>Our algorithm:</strong>
+                </p>
+                <ul style="margin: 15px 0 15px 20px; color: #555;">
+                    <li>Analyzes every street in your area</li>
+                    <li>Assigns noise costs based on road type</li>
+                    <li>Finds the quietest possible path to your destination</li>
+                    <li>Displays it beautifully on an interactive map</li>
+                </ul>
+                <p>
+                    No ads. No tracking. Just pure, peaceful navigation.
+                </p>
+            </div>
+        </div>
+
+        <div class="how-it-works">
+            <h3>🔧 Our Quiet Route Algorithm</h3>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h4>Analyze Your Route</h4>
+                    <p>We calculate the real-world distance between your points and download a street network sized to fit — short trips get a tight graph, long routes get a wider one.</p>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h4>Assign Noise Costs</h4>
+                    <p>Each street gets a noise score from 1× (footpath) to 8× (motorway) based on its road type. Unknown roads default to 2.5× — never silently ignored.</p>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h4>Find Quiet Path</h4>
+                    <p>Our pathfinding algorithm calculates the route with the lowest total noise cost, not the shortest distance.</p>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <h4>Navigate Peacefully</h4>
+                    <p>Follow the route on your map through the quietest streets available. If a location can't be found or no path exists, you'll get a clear, friendly message — not a crash.</p>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 30px; color: #2b2d42;">Noise Cost Breakdown</h3>
+            <div class="noise-levels">
+                <div class="noise-type noise-high">
+                    🛣️ Motorways &amp; Trunks<br>
+                    <small>Cost: 6–8×</small>
+                </div>
+                <div class="noise-type" style="background-color:#f77f00; color:white; border:2px solid #2b2d42; box-shadow:0 3px 0 #2b2d42;">
+                    🚗 Primary Roads<br>
+                    <small>Cost: 3–5×</small>
+                </div>
+                <div class="noise-type noise-medium">
+                    🛤️ Secondary &amp; Tertiary<br>
+                    <small>Cost: 1.5–2.5×</small>
+                </div>
+                <div class="noise-type noise-low">
+                    🏘️ Residential, Paths &amp; Footways<br>
+                    <small>Cost: 1–1.5×</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="mission">
+            <h3>✨ Our Mission</h3>
+            <p>
+                To empower people with the tools to navigate through peaceful, sensory-friendly environments. 
+                Because the best journey isn't always the fastest one—it's the one that feels right.
+            </p>
+        </div>
+    </div>
+</div>
+
+<footer>
+    <p>&copy; 2026 Sensory Impact Navigation &mdash; Every route is a piece of the puzzle. 🧩</p>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>

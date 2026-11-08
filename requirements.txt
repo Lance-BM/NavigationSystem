@@ -1,0 +1,7 @@
+Flask==3.0.0
+osmnx==1.8.1
+networkx==3.3
+requests==2.31.0
+numpy==1.24.3
+gunicorn==21.2.0
+scikit-learn
