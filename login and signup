@@ -3,7 +3,21 @@ import os
 import hashlib
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
-im so b
+from flask import Flask, render_template, request
+
+app = Flask(__name__)
+
+@app.route("/", methods=["GET", "POST"])
+def home():
+    user_message = ""
+    if request.method == "POST":
+        # Grab data from the HTML form input named 'message'
+        user_message = request.form.get("message")
+        
+    return render_template("index.html", reply=user_message)
+
+if __name__ == "__main__":
+    app.run(debug=True)
 #Login/Sign-up Page Code:
 
 
