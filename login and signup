@@ -1,1 +1,77 @@
+import time
+import os
+import hashlib
+def clear():
+    os.system('cls' if os.name == 'nt' else 'clear')
+im so b
+#Login/Sign-up Page Code:
 
+
+USER_DATABASE = {}
+def hash_password(password):
+    """Securely hash the password before saving or checking."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def sign_up():
+    print("\nMake an Account")
+    username = input("Enter a new username: ").strip()
+    
+    if not username:
+        print("Username cannot be empty.")
+        return
+
+
+    if username in USER_DATABASE:
+        print("Username already exists! Try logging in.")
+        return
+
+
+    password = input("Enter a 4 digit password: ")
+    if len(password) < 4:
+        print("Password must be at least 4 characters long.")
+        return
+      
+    USER_DATABASE[username] = hash_password(password)
+    print("Sign up successful! You can now log in.")
+
+
+def log_in():
+    print("\n--- LOG IN ---")
+    username = input("Username: ").strip()
+    password = input("Password: ")
+
+
+   
+    hashed_pwd = USER_DATABASE.get(username)
+
+
+    if hashed_pwd and hashed_pwd == hash_password(password):
+        print(f"Welcome back, {username}! Login successful.")
+        return True
+    else:
+        print("Invalid username or password.")
+        return False
+
+
+def main():
+    while True:
+        print("\n=== WELCOME ===")
+        print("1. Sign Up")
+        print("2. Log In")
+       
+        
+        choice = input("Choose an option (1 or 2): ").strip()
+        
+        if choice == "1":
+            sign_up()
+        elif choice == "2":
+            log_in()
+            
+        else:
+            print("Invalid choice. Please select 1 or 2.")
+
+
+if __name__ == "__main__":
+    main()
+    r''
