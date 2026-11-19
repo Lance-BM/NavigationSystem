@@ -1,40 +1,36 @@
 import logging
 import os
-from math import radians, sin, cos, sqrt, atan2
+from math import atan2, cos, radians, sin, sqrt
+from typing import Final, TypedDict
 
 import networkx as nx
 import osmnx as ox
 from flask import Flask, jsonify, render_template, request
 
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
-
-app = Flask(__name__)
+app = Flask(_name_)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-log = logging.getLogger(__name__)
+log = logging.getLogger(_name_)
 
-# ---------------------------------------------------------------------------
-# Noise cost configuration
-# ---------------------------------------------------------------------------
 
-# Higher multiplier = noisier = less preferred by the routing algorithm.
-# Anything not listed falls back to DEFAULT_FACTOR.
-HIGHWAY_NOISE_FACTORS: dict[str, float] = {
-    # Very noisy
+class Coord(TypedDict):
+    lat: float
+    lng: float
+
+
+type LatLon = list[float]  # [lat, lon] pair (PEP 695 type alias, Python 3.12+)
+
+HIGHWAY_NOISE_FACTORS: Final[dict[str, float]] = {
     "motorway": 8,
     "motorway_link": 8,
     "trunk": 6,
     "trunk_link": 6,
     "primary": 5,
     "primary_link": 5,
-    # Moderate
     "secondary": 4,
     "secondary_link": 4,
     "tertiary": 3,
     "tertiary_link": 3,
     "unclassified": 2,
-    # Quiet
     "residential": 1.2,
     "living_street": 1,
     "pedestrian": 1,
@@ -44,51 +40,40 @@ HIGHWAY_NOISE_FACTORS: dict[str, float] = {
     "track": 1.2,
     "service": 1.5,
 }
-DEFAULT_NOISE_FACTOR = 2.5  # Sensible mid-range for unknown road types
+DEFAULT_NOISE_FACTOR: Final = 2.5
+EARTH_RADIUS_KM: Final = 6371.0
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Return the great-circle distance in kilometres between two coordinates."""
-    R = 6371.0
-    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-    return R * 2 * atan2(sqrt(a), sqrt(1 - a))
+    lat1, lon1, lat2, lon2 = map(radians, (lat1, lon1, lat2, lon2))
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    a = sin(dlat / 2) * 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) * 2
+    return EARTH_RADIUS_KM * 2 * atan2(sqrt(a), sqrt(1 - a))
 
 
 def graph_radius_m(distance_km: float, padding: float = 1.3, minimum_m: float = 1500) -> float:
     """
     Convert a crow-flies route distance into an OSM download radius.
-    We add padding so the graph comfortably contains both endpoints,
-    and enforce a minimum so very short routes still get a usable graph.
+    Padding keeps both endpoints comfortably inside the graph, and the
+    minimum ensures very short routes still get a usable graph.
     """
     return max(minimum_m, (distance_km / 2) * 1000 * padding)
 
 
 def add_noise_costs(G: nx.MultiDiGraph) -> nx.MultiDiGraph:
-    """Annotate every edge with a 'cost' = length × noise_factor."""
-    for u, v, k, data in G.edges(keys=True, data=True):
+    """Annotate every edge with 'cost' = length × noise factor."""
+    for _, _, data in G.edges(data=True):
         highway = data.get("highway", "")
-        # OSM sometimes returns a list (multiple tags); take the first.
         if isinstance(highway, list):
             highway = highway[0]
-
         factor = HIGHWAY_NOISE_FACTORS.get(highway, DEFAULT_NOISE_FACTOR)
         data["cost"] = data.get("length", 1) * factor
-
     return G
 
 
-def parse_coord(raw: object, field: str) -> dict:
-    """
-    Validate and return a coordinate dict with 'lat' and 'lng' floats.
-    Raises ValueError with a descriptive message on bad input.
-    """
+def parse_coord(raw: object, field: str) -> Coord:
+    """Validate and return a coordinate. Raises ValueError on bad input."""
     if not isinstance(raw, dict):
         raise ValueError(f"'{field}' must be an object with 'lat' and 'lng' keys.")
 
@@ -96,17 +81,17 @@ def parse_coord(raw: object, field: str) -> dict:
         lat = float(raw["lat"])
         lng = float(raw["lng"])
     except (KeyError, TypeError, ValueError):
-        raise ValueError(f"'{field}' must have numeric 'lat' and 'lng' values.")
+        raise ValueError(f"'{field}' must have numeric 'lat' and 'lng' values.") from None
 
-    if not (-90 <= lat <= 90):
+    if not -90 <= lat <= 90:
         raise ValueError(f"'{field}.lat' must be between -90 and 90.")
-    if not (-180 <= lng <= 180):
+    if not -180 <= lng <= 180:
         raise ValueError(f"'{field}.lng' must be between -180 and 180.")
 
-    return {"lat": lat, "lng": lng}
+    return Coord(lat=lat, lng=lng)
 
 
-def build_graph(start: dict, end: dict) -> nx.MultiDiGraph:
+def build_graph(start: Coord, end: Coord) -> nx.MultiDiGraph:
     """Download the OSM walking graph sized to fit the requested route."""
     center_lat = (start["lat"] + end["lat"]) / 2
     center_lng = (start["lng"] + end["lng"]) / 2
@@ -128,7 +113,7 @@ def build_graph(start: dict, end: dict) -> nx.MultiDiGraph:
     )
 
 
-def find_quiet_route(G: nx.MultiDiGraph, start: dict, end: dict) -> list[list[float]]:
+def find_quiet_route(G: nx.MultiDiGraph, start: Coord, end: Coord) -> list[LatLon]:
     """Return a list of [lat, lon] pairs for the quietest path through G."""
     orig = ox.distance.nearest_nodes(G, X=start["lng"], Y=start["lat"])
     dest = ox.distance.nearest_nodes(G, X=end["lng"], Y=end["lat"])
@@ -136,10 +121,6 @@ def find_quiet_route(G: nx.MultiDiGraph, start: dict, end: dict) -> list[list[fl
     route_nodes = nx.shortest_path(G, orig, dest, weight="cost")
     return [[G.nodes[n]["y"], G.nodes[n]["x"]] for n in route_nodes]
 
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
 
 @app.route("/")
 def index():
@@ -152,7 +133,6 @@ def route():
     if not payload:
         return jsonify({"error": "Request body must be valid JSON."}), 400
 
-    # Validate inputs before touching OSM.
     try:
         start = parse_coord(payload.get("start"), "start")
         end = parse_coord(payload.get("end"), "end")
@@ -160,25 +140,21 @@ def route():
         return jsonify({"error": str(exc)}), 422
 
     try:
-        G = build_graph(start, end)
-        G = add_noise_costs(G)
-        coords = find_quiet_route(G, start, end)
-        return jsonify({"route": coords})
+        G = add_noise_costs(build_graph(start, end))
+        return jsonify({"route": find_quiet_route(G, start, end)})
 
     except nx.NetworkXNoPath:
         return jsonify({"error": "No path found between those locations."}), 404
     except nx.NodeNotFound:
         return jsonify({"error": "One or both locations could not be found on the map."}), 404
-    except Exception as exc:
-        # Log the real error server-side; don't leak internals to the client.
-        log.exception("Unexpected error during routing: %s", exc)
+    except Exception:
+        log.exception("Unexpected error during routing")
         return jsonify({"error": "An unexpected server error occurred."}), 500
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
-    app.run(debug=False)
+if _name_ == "_main_":
+    app.run(
+        host="127.0.0.1",
+        port=int(os.environ.get("PORT", 5000)),
+        debug=os.environ.get("FLASK_DEBUG") == "1",
+    ) 
