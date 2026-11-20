@@ -21,7 +21,7 @@ async function fetchJson(url, options = {}) {
     data = JSON.parse(text);
   } catch {
     console.error("Response not JSON:", text);
-    throw new Error(Server returned an invalid response (HTTP ${res.status}).);
+    throw new Error(Server returned an invalid response (HTTP ${res.status}).));
   }
 
   if (!res.ok) {
