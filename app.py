@@ -1,4 +1,4 @@
-pip install --upgrade scikit-learn
+
 
 import logging
 import os
