@@ -12,9 +12,9 @@ from flask import Flask, jsonify, render_template, request
 # App setup
 # ---------------------------------------------------------------------------
 
-app = Flask(_name_)
+app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-log = logging.getLogger(_name_)
+log = logging.getLogger(__name__)
 
 
 class Coord(TypedDict):
@@ -187,6 +187,6 @@ def route():
 # Entry point
 # ---------------------------------------------------------------------------
 
-if _name_ == "_main_":
-    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
-    app.run(debug=debug) 
+if __name__ == "__main__":
+    # debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run() # (debug=debug) 
