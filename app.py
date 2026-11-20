@@ -1,4 +1,3 @@
-pip install
 import logging
 import os
 from math import atan2, cos, radians, sin, sqrt
@@ -8,12 +7,10 @@ import networkx as nx
 import osmnx as ox
 from flask import Flask, jsonify, render_template, request
 
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
-
 app = Flask(__name__)
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
 log = logging.getLogger(__name__)
 
 
@@ -188,5 +185,5 @@ def route():
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
-    app.run() # (debug=debug) 
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run(debug=debug) 
