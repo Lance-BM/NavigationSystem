@@ -1,3 +1,5 @@
+pip install --upgrade scikit-learn
+
 import logging
 import os
 from math import atan2, cos, radians, sin, sqrt
