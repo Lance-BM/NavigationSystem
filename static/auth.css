@@ -1,0 +1,14 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Nunito', sans-serif;
+    color: #2b2d42;
+    background-color: #fdf6ec;
+    background-image: radial-gradient(circle, #e0c9a6 1px, transparent 1px);
+    background-size: 28px 28px;
+    min-height: 100vh;
+}
