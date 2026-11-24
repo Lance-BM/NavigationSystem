@@ -38,3 +38,34 @@ body {
     border-bottom: 4px solid #f4a261;
 }
 
+.card-header h1 {
+    font-family: 'Fredoka One', cursive;
+    font-weight: normal;
+    font-size: 1.6em;
+    letter-spacing: 1px;
+    color: #f4a261;
+    margin-bottom: 6px;
+}
+
+.card-header p {
+    font-size: 1.05em;
+    opacity: 0.85;
+}
+
+.card-body {
+    padding: 28px 24px;
+}
+
+.lead {
+    color: #555;
+    line-height: 1.6;
+    margin-bottom: 22px;
+    font-size: 1.05em;
+}
+
+.choice-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
