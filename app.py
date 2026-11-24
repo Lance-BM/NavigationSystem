@@ -1,6 +1,7 @@
 import logging
 import importlib
 import os
+import socket
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -8,6 +9,7 @@ from functools import wraps
 from math import atan2, cos, radians, sin, sqrt
 from pathlib import Path
 from typing import Final, TypedDict
+from urllib.parse import urlsplit
 
 import networkx as nx
 import osmnx as ox
@@ -36,7 +38,15 @@ OVERPASS_TIMEOUT_S: Final = int(os.environ.get("OVERPASS_TIMEOUT", 60))
 # (120 s in the recommended start command), otherwise gunicorn kills the worker mid-request.
 OVERPASS_TOTAL_BUDGET_S: Final = float(os.environ.get("OVERPASS_TOTAL_BUDGET", 100))
 MIN_ATTEMPT_S: Final = 10  # don't start another server with less than this many seconds left
+# Before using a server, check it accepts a connection within this many seconds (0 turns the check off).
+# Without it, a server that silently drops connections can use up the whole time budget by itself.
+PROBE_TIMEOUT_S: Final = float(os.environ.get("OVERPASS_PROBE_TIMEOUT", 5))
+# After a server fails, it is tried last (not skipped) for this many seconds.
+SERVER_COOLDOWN_S: Final = 300
+_failed_at: dict[str, float] = {}  # server URL -> time of its last failure
 ox.settings.requests_timeout = OVERPASS_TIMEOUT_S
+# Set OVERPASS_RATE_LIMIT=0 for servers without a /status page (e.g. some keyed services).
+ox.settings.overpass_rate_limit = os.environ.get("OVERPASS_RATE_LIMIT", "1") != "0"
 ox.settings.log_console = False
 
 
@@ -199,6 +209,26 @@ def parse_coord(raw: object, field: str) -> Coord:
 
 
 
+def _reachable(url: str) -> bool:
+    """Quickly check that a TCP connection to the server can be opened."""
+    if PROBE_TIMEOUT_S <= 0:
+        return True
+    parts = urlsplit(url)
+    try:
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+        with socket.create_connection((parts.hostname, port), timeout=PROBE_TIMEOUT_S):
+            return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def _servers_in_order() -> list[str]:
+    """The configured servers, with any that failed recently moved to the back."""
+    now = time.monotonic()
+    recent = [u for u in OVERPASS_URLS if u in _failed_at and now - _failed_at[u] < SERVER_COOLDOWN_S]
+    return [u for u in OVERPASS_URLS if u not in recent] + recent
+
+
 def build_graph(start: Coord, end: Coord) -> nx.MultiDiGraph:
     """Download the OSM walking graph sized to fit the requested route."""
     center_lat = (start["lat"] + end["lat"]) / 2
@@ -216,7 +246,17 @@ def build_graph(start: Coord, end: Coord) -> nx.MultiDiGraph:
 
 
     deadline = time.monotonic() + OVERPASS_TOTAL_BUDGET_S
-    for url in OVERPASS_URLS:
+    for url in _servers_in_order():
+        if deadline - time.monotonic() < MIN_ATTEMPT_S:
+            log.warning("Out of time; not trying %s or any later server.", url)
+            break
+        if not _reachable(url):
+            _failed_at[url] = time.monotonic()
+            log.warning(
+                "Overpass server %s did not accept a connection within %s s; skipping it.",
+                url, PROBE_TIMEOUT_S,
+            )
+            continue
         remaining = deadline - time.monotonic()
         if remaining < MIN_ATTEMPT_S:
             log.warning("Out of time (%.0f s left); not trying %s or any later server.", remaining, url)
@@ -224,7 +264,7 @@ def build_graph(start: Coord, end: Coord) -> nx.MultiDiGraph:
         ox.settings.overpass_url = url
         ox.settings.requests_timeout = int(min(OVERPASS_TIMEOUT_S, remaining))
         try:
-            return ox.graph_from_point(
+            G = ox.graph_from_point(
                 (center_lat, center_lng),
                 dist=radius_m,
                 network_type="walk",
@@ -236,6 +276,10 @@ def build_graph(start: Coord, end: Coord) -> nx.MultiDiGraph:
                 "Overpass server %s failed (%s: %.200s); trying the next one.",
                 url, type(exc).__name__, exc,
             )
+            _failed_at[url] = time.monotonic()
+            continue
+        _failed_at.pop(url, None)
+        return G
 
     raise MapDataUnavailable
 
