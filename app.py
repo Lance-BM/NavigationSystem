@@ -2,6 +2,7 @@ import logging
 import importlib
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
 from functools import wraps
 from math import atan2, cos, radians, sin, sqrt
@@ -29,9 +30,13 @@ log = logging.getLogger(__name__)
 
 ox.settings.use_cache = True
 ox.settings.cache_folder = os.environ.get("OSMNX_CACHE", "cache")
-# Seconds to wait for each Overpass server. Kept short so that trying several servers
-# still finishes inside gunicorn's worker timeout (e.g. 3 servers x 30 s = 90 s).
-ox.settings.requests_timeout = int(os.environ.get("OVERPASS_TIMEOUT", 30))
+# Public Overpass servers can be slow, so each one gets a generous timeout (seconds) ...
+OVERPASS_TIMEOUT_S: Final = int(os.environ.get("OVERPASS_TIMEOUT", 60))
+# ... but all servers together get a total time budget (seconds). Keep it BELOW gunicorn's --timeout
+# (120 s in the recommended start command), otherwise gunicorn kills the worker mid-request.
+OVERPASS_TOTAL_BUDGET_S: Final = float(os.environ.get("OVERPASS_TOTAL_BUDGET", 100))
+MIN_ATTEMPT_S: Final = 10  # don't start another server with less than this many seconds left
+ox.settings.requests_timeout = OVERPASS_TIMEOUT_S
 ox.settings.log_console = False
 
 
@@ -210,8 +215,14 @@ def build_graph(start: Coord, end: Coord) -> nx.MultiDiGraph:
     )
 
 
+    deadline = time.monotonic() + OVERPASS_TOTAL_BUDGET_S
     for url in OVERPASS_URLS:
+        remaining = deadline - time.monotonic()
+        if remaining < MIN_ATTEMPT_S:
+            log.warning("Out of time (%.0f s left); not trying %s or any later server.", remaining, url)
+            break
         ox.settings.overpass_url = url
+        ox.settings.requests_timeout = int(min(OVERPASS_TIMEOUT_S, remaining))
         try:
             return ox.graph_from_point(
                 (center_lat, center_lng),
