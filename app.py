@@ -1,8 +1,10 @@
 import logging
+import ast
 import importlib
 import os
 import socket
 import sqlite3
+import threading
 import time
 from contextlib import contextmanager
 from functools import wraps
@@ -44,6 +46,15 @@ PROBE_TIMEOUT_S: Final = float(os.environ.get("OVERPASS_PROBE_TIMEOUT", 5))
 # After a server fails, it is tried last (not skipped) for this many seconds.
 SERVER_COOLDOWN_S: Final = 300
 _failed_at: dict[str, float] = {}  # server URL -> time of its last failure
+
+# A street map prepared in advance with prepare_map.py. When this file exists, routes between
+# two points inside it never need the (unreliable) public Overpass servers.
+# Override the location with MAP_FILE. Set OFFLINE_ONLY=1 to never download live data at all.
+MAP_FILE: Final = Path(os.environ.get("MAP_FILE", "").strip() or Path(__file__).with_name("map_data") / "area.graphml")
+OFFLINE_ONLY: Final = os.environ.get("OFFLINE_ONLY", "0").strip() == "1"
+OFFLINE_MARGIN_DEG: Final = 0.002  # about 200 m of slack around the edge of the prepared map
+_offline: dict = {}  # filled on first use: "graph" and "bounds" (west, south, east, north)
+_offline_lock = threading.Lock()
 ox.settings.requests_timeout = OVERPASS_TIMEOUT_S
 # Set OVERPASS_RATE_LIMIT=0 for servers without a /status page (e.g. some keyed services).
 ox.settings.overpass_rate_limit = os.environ.get("OVERPASS_RATE_LIMIT", "1") != "0"
@@ -71,6 +82,10 @@ ResponseStatusCodeError = _osmnx_error("ResponseStatusCodeError")
 
 class MapDataUnavailable(Exception):
     """None of the Overpass (OpenStreetMap data) servers could be reached."""
+
+
+class OutsideMapArea(Exception):
+    """OFFLINE_ONLY is on and the route is not fully inside the prepared map."""
 
 
 
@@ -168,6 +183,12 @@ def add_noise_costs(G: nx.MultiDiGraph) -> nx.MultiDiGraph:
     """Annotate every edge with a 'cost' = length × noise_factor."""
     for _, _, data in G.edges(data=True):
         highway = data.get("highway", "")
+        # A map saved to a file stores a list of tags as text like "['footway', 'path']"; turn it back.
+        if isinstance(highway, str) and highway.startswith("["):
+            try:
+                highway = ast.literal_eval(highway)
+            except (ValueError, SyntaxError):
+                pass
         # OSM sometimes returns a list (multiple tags); take the first.
         if isinstance(highway, list):
             highway = highway[0] if highway else ""
@@ -229,8 +250,53 @@ def _servers_in_order() -> list[str]:
     return [u for u in OVERPASS_URLS if u not in recent] + recent
 
 
+def _load_offline_graph() -> nx.MultiDiGraph | None:
+    """Load the prepared map file once (None if there is none or it can't be read)."""
+    with _offline_lock:
+        if "loaded" not in _offline:
+            _offline["loaded"] = True
+            _offline["graph"] = None
+            if MAP_FILE.is_file():
+                try:
+                    G = add_noise_costs(ox.load_graphml(MAP_FILE))
+                    xs = [d["x"] for _, d in G.nodes(data=True)]
+                    ys = [d["y"] for _, d in G.nodes(data=True)]
+                    _offline["bounds"] = (min(xs), min(ys), max(xs), max(ys))
+                    _offline["graph"] = G
+                    log.info(
+                        "Loaded prepared map %s: %d nodes, %d edges",
+                        MAP_FILE, G.number_of_nodes(), G.number_of_edges(),
+                    )
+                except Exception:
+                    log.exception("Could not read the prepared map %s; using live map data instead.", MAP_FILE)
+            else:
+                log.info("No prepared map at %s; using live map data.", MAP_FILE)
+        return _offline["graph"]
+
+
+def _offline_graph_for(start: Coord, end: Coord) -> nx.MultiDiGraph | None:
+    """The prepared map, if it exists and both points lie inside it; otherwise None."""
+    G = _load_offline_graph()
+    if G is None:
+        return None
+    west, south, east, north = _offline["bounds"]
+    m = OFFLINE_MARGIN_DEG
+    for p in (start, end):
+        if not (west - m <= p["lng"] <= east + m and south - m <= p["lat"] <= north + m):
+            return None
+    return G
+
+
 def build_graph(start: Coord, end: Coord) -> nx.MultiDiGraph:
-    """Download the OSM walking graph sized to fit the requested route."""
+    """Return the walking graph for a route: the prepared map if it covers the route, otherwise
+    a live download from the Overpass servers."""
+    G = _offline_graph_for(start, end)
+    if G is not None:
+        log.info("Using the prepared map for this route.")
+        return G
+    if OFFLINE_ONLY:
+        raise OutsideMapArea
+
     center_lat = (start["lat"] + end["lat"]) / 2
     center_lng = (start["lng"] + end["lng"]) / 2
 
@@ -482,6 +548,8 @@ def route():
         return jsonify(error="No walkable path found between those points."), 404
     except InsufficientResponseError:
         return jsonify(error="No OpenStreetMap walking data found for that area."), 404
+    except OutsideMapArea:
+        return jsonify(error="Those locations are outside the area this app has map data for."), 404
     except MapDataUnavailable:
         return jsonify(
             error="The OpenStreetMap data service can't be reached right now. Please try again in a few minutes."
