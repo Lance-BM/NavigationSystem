@@ -69,3 +69,98 @@ body {
     gap: 14px;
 }
 
+/* Buttons (links and real buttons share the same look) */
+.btn {
+    display: block;
+    width: 100%;
+    padding: 12px 25px;
+    text-align: center;
+    text-decoration: none;
+    background-color: #f4a261;
+    color: #2b2d42;
+    border: 2px solid #2b2d42;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.1em;
+    font-family: 'Fredoka One', cursive;
+    letter-spacing: 0.5px;
+    box-shadow: 0 3px 0 #2b2d42;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn:hover {
+    background-color: #e8894a;
+    transform: translateY(-1px);
+}
+
+.btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 #2b2d42;
+}
+
+.btn-alt {
+    background-color: white;
+}
+
+.btn-alt:hover {
+    background-color: #fdf6ec;
+}
+
+/* Forms */
+.auth-form label {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.auth-form input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 18px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    font-size: 1em;
+    font-family: 'Nunito', sans-serif;
+    background: #fdf6ec;
+    transition: border-color 0.3s;
+}
+
+.auth-form input:focus {
+    outline: none;
+    border-color: #f4a261;
+}
+
+.flash {
+    background: #fdecea;
+    border: 2px solid #e63946;
+    color: #9b1c27;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 18px;
+    font-weight: 600;
+}
+
+.switch {
+    margin-top: 22px;
+    text-align: center;
+    color: #555;
+}
+
+.switch a,
+.back-link {
+    color: #2b2d42;
+    font-weight: 700;
+}
+
+.back-link {
+    display: block;
+    margin-top: 12px;
+    text-align: center;
+    font-size: 0.95em;
+}
+
+a:focus-visible,
+.btn:focus-visible {
+    outline: 3px solid #f4a261;
+    outline-offset: 2px;
+}
