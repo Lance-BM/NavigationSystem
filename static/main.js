@@ -21,11 +21,17 @@ async function fetchJson(url, options = {}) {
     data = JSON.parse(text);
   } catch {
     console.error("Response not JSON:", text);
-    throw new Error(Server returned an invalid response (HTTP ${res.status}).));
+    throw new Error(`Server returned an invalid response (HTTP ${res.status}).`);
+  }
+
+  if (res.status === 401 && url.startsWith("/")) {
+    // Not logged in (or the session ended): send the user back to the entry page.
+    window.location.href = "/";
+    throw new Error("Please log in first.");
   }
 
   if (!res.ok) {
-    throw new Error(data?.error ?? Request failed (HTTP ${res.status}).);
+    throw new Error(data?.error ?? `Request failed (HTTP ${res.status}).`);
   }
   return data;
 }
@@ -34,7 +40,7 @@ async function fetchJson(url, options = {}) {
 async function geocode(query, signal) {
   const params = new URLSearchParams({ format: "json", limit: "1", q: query });
   const results = await fetchJson(
-    https://nominatim.openstreetmap.org/search?${params},
+    `https://nominatim.openstreetmap.org/search?${params}`,
     { signal },
   );
 
@@ -88,7 +94,7 @@ async function geocodeAndRoute(startName, endName) {
   } catch (err) {
     if (err.name === "AbortError") return;
     console.error("Request failed:", err);
-    alert(Error: ${err.message});
+    alert(`Error: ${err.message}`);
   } finally {
     submitButton.disabled = false;
   }
