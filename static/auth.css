@@ -12,3 +12,29 @@ body {
     background-size: 28px 28px;
     min-height: 100vh;
 }
+
+.auth-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+}
+
+.card {
+    width: 100%;
+    max-width: 440px;
+    background: white;
+    border: 3px solid #2b2d42;
+    border-radius: 12px;
+    box-shadow: 0 4px 0 #c9a87c, 0 6px 20px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+}
+
+.card-header {
+    background : #2b2d42;
+    color: #fdf6ec;
+    padding: 28px 24px;
+    border-bottom: 4px solid #f4a261;
+}
+
