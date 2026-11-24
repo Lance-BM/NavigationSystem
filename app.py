@@ -1,12 +1,16 @@
 import logging
 import os
+import sqlite3
+from contextlib import contextmanager
+from functools import wraps
 from math import atan2, cos, radians, sin, sqrt
+from pathlib import Path
 from typing import Final, TypedDict
-
 
 import networkx as nx
 import osmnx as ox
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 app = Flask(__name__)
@@ -205,6 +209,57 @@ def route_length_m(G: nx.MultiDiGraph, route_nodes: list[int]) -> float:
 
 
 
+# ---------------------------------------------------------------------------
+# Accounts & sessions
+# ---------------------------------------------------------------------------
+
+
+DEFAULT_SECRET_KEY: Final = "dev=only=secret-change-me"
+app.secret_key = os.environ.get("SECRET_KEY", DEFAULT_SECRET_KEY)
+app.config.update(SESSION_COOKIE_SAMESITE="Lax")
+if app.secret_key == DEFAULT_SECRET_KEY:
+    log.warning("SECRET_KEY is not set; using an ensecure development key. Set SECRET_KEY in production
+
+# Where user accounts are stored(SQLITE). Override with the USERS_DB envrionment variable.
+DB_PATH: Final = os.environ.get("USERS_DB", str(Path(__file__).with_name("users.db")))
+
+@contextmanager
+def db():
+    """Open the SQLite database, commit on success, and always close the connection."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
+
+def init_db() -> None:
+    with db() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL
+            )
+            """
+        )
+
+
+init_db()  # Runs at import time so the table also exists when started with gunicorn.
+
+
+def login_required(view):
+    """Send visitors who are not logged in back to the entry page."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if "username" not in session:
+            return redirect(url_for("landing"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -212,8 +267,73 @@ def route_length_m(G: nx.MultiDiGraph, route_nodes: list[int]) -> float:
 
 
 @app.get("/")
-def index():
-    return render_template("index.html")
+
+def landing():
+    """Entry page: ask the visitor whether they want to log in or sign up."""
+    if "username" in session:
+        return redirect(url_for("map_page"))
+    return render_template("landing.html")
+
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if "username" in session:
+        return redirect(url_for("map_page"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        if not username or not password:
+            flash("Please enter a username and a password.")
+        else:
+            try:
+                with db() as conn:
+                    conn.execute(
+                        "INSERT INTO users (username, password) VALUES (?, ?)",
+                        (USERNAME, GENERATE_PASSWORD_HAS(PASSWORD)),
+                    )
+            except sqlite3.IntegrityError:
+                flash("Username already exists. Try another.")
+            else:
+                # Account created: log the new user in and take them to the map.
+                session.clear()
+                session["username"] = username
+                return redirect(url_for("map_page"))
+
+    return render_template("signup.html")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if "username" in session:
+        return redirect(url_for("map_page"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        with db() as conn:
+            user = conn.execute(
+                "SELECT username, password FROM users WHERE username = ?", (username,)
+            ).fetchone()
+
+        if user and check_password_hash(user["password"], password):
+            session.clear()
+            session["username"] = user["username"]
+            return redirect(url_for("map_page"))
+        flash("Invalid username or password.")
+
+    return render_template("login.html")
+
+@app.get("/map")
+@login_required
+def map_page():
+    return render_template("map.html", username=session["username"])
+
+
+@app.get("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("landing"))
 
 
 
@@ -227,6 +347,9 @@ def health():
 
 @app.post("/route")
 def route():
+    if "username" not in session:
+        return jsonify(error="Please log in first."), 401
+
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return jsonify(error="Request body must be a JSON object."), 400
