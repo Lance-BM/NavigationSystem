@@ -214,13 +214,13 @@ def route_length_m(G: nx.MultiDiGraph, route_nodes: list[int]) -> float:
 # ---------------------------------------------------------------------------
 
 
-DEFAULT_SECRET_KEY: Final = "dev=only=secret-change-me"
+DEFAULT_SECRET_KEY: Final = "dev-only-secret-change-me"
 app.secret_key = os.environ.get("SECRET_KEY", DEFAULT_SECRET_KEY)
 app.config.update(SESSION_COOKIE_SAMESITE="Lax")
 if app.secret_key == DEFAULT_SECRET_KEY:
-    log.warning("SECRET_KEY is not set; using an ensecure development key. Set SECRET_KEY in production
+    log.warning("SECRET_KEY is not set; using an insecure development key. Set SECRET_KEY in production.")
 
-# Where user accounts are stored(SQLITE). Override with the USERS_DB envrionment variable.
+# Where user accounts are stored (SQLite). Override with the USERS_DB environment variable.
 DB_PATH: Final = os.environ.get("USERS_DB", str(Path(__file__).with_name("users.db")))
 
 @contextmanager
@@ -290,7 +290,7 @@ def signup():
                 with db() as conn:
                     conn.execute(
                         "INSERT INTO users (username, password) VALUES (?, ?)",
-                        (USERNAME, GENERATE_PASSWORD_HAS(PASSWORD)),
+                        (username, generate_password_hash(password)),
                     )
             except sqlite3.IntegrityError:
                 flash("Username already exists. Try another.")
