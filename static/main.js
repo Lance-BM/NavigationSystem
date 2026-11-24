@@ -10,6 +10,7 @@ const routeLayer = L.layerGroup().addTo(map);
 
 const form = document.getElementById("routeForm");
 const submitButton = form.querySelector('button[type="submit"]');
+const idleLabel = submitButton.textContent;
 
 /** fetch + JSON parsing with proper HTTP error handling */
 async function fetchJson(url, options = {}) {
@@ -69,6 +70,7 @@ async function geocodeAndRoute(startName, endName) {
   const { signal } = currentRequest;
 
   submitButton.disabled = true;
+  submitButton.textContent = "Finding route...";
 
   try {
     const [start, end] = await Promise.all([
@@ -97,6 +99,7 @@ async function geocodeAndRoute(startName, endName) {
     alert(`Error: ${err.message}`);
   } finally {
     submitButton.disabled = false;
+    submitButton.textContent = idleLabel;
   }
 }
 
