@@ -215,7 +215,8 @@ def route_length_m(G: nx.MultiDiGraph, route_nodes: list[int]) -> float:
 
 
 DEFAULT_SECRET_KEY: Final = "dev-only-secret-change-me"
-app.secret_key = os.environ.get("SECRET_KEY", DEFAULT_SECRET_KEY)
+# An empty or blank SECRET_KEY counts as "not set" (Flask would otherwise have no session key at all).
+app.secret_key = os.environ.get("SECRET_KEY", "").strip() or DEFAULT_SECRET_KEY
 app.config.update(SESSION_COOKIE_SAMESITE="Lax")
 if app.secret_key == DEFAULT_SECRET_KEY:
     log.warning("SECRET_KEY is not set; using an insecure development key. Set SECRET_KEY in production.")
