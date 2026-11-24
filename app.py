@@ -1,4 +1,5 @@
 import logging
+import importlib
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -9,6 +10,7 @@ from typing import Final, TypedDict
 
 import networkx as nx
 import osmnx as ox
+import requests
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -27,8 +29,33 @@ log = logging.getLogger(__name__)
 
 ox.settings.use_cache = True
 ox.settings.cache_folder = os.environ.get("OSMNX_CACHE", "cache")
-ox.settings.requests_timeout = 90
+# Seconds to wait for each Overpass server. Kept short so that trying several servers
+# still finishes inside gunicorn's worker timeout (e.g. 3 servers x 30 s = 90 s).
+ox.settings.requests_timeout = int(os.environ.get("OVERPASS_TIMEOUT", 30))
 ox.settings.log_console = False
+
+
+def _osmnx_error(name: str) -> type[Exception]:
+    """Find an osmnx exception class.
+
+    osmnx 2.x keeps its exceptions in the private module osmnx._errors (there is no ox.errors);
+    osmnx 1.x used osmnx.errors. If neither has it, return a class that osmnx never raises,
+    so such errors simply fall through to the generic handler.
+    """
+    for module_name in ("osmnx._errors", "osmnx.errors"):
+        try:
+            return getattr(importlib.import_module(module_name), name)
+        except (ImportError, AttributeError):
+            continue
+    return type(name, (Exception,), {})
+
+
+InsufficientResponseError = _osmnx_error("InsufficientResponseError")
+ResponseStatusCodeError = _osmnx_error("ResponseStatusCodeError")
+
+
+class MapDataUnavailable(Exception):
+    """None of the Overpass (OpenStreetMap data) servers could be reached."""
 
 
 
@@ -78,6 +105,19 @@ HIGHWAY_NOISE_FACTORS: Final[dict[str, float]] = {
 }
 DEFAULT_NOISE_FACTOR: Final = 2.5  # Sensible mid-range for unknown road types
 EARTH_RADIUS_KM: Final = 6371.0
+# Public Overpass servers (where the OpenStreetMap street data is downloaded from), tried in order.
+# overpass-api.de is often overloaded or refuses connections, so mirrors are used as a fallback.
+# Override with OVERPASS_URLS: comma-separated base URLs, each ending in /api.
+DEFAULT_OVERPASS_URLS: Final = (
+    "https://overpass-api.de/api",
+    "https://overpass.private.coffee/api",
+    "https://maps.mail.ru/osm/tools/overpass/api",
+)
+OVERPASS_URLS: Final = [
+    url.strip().rstrip("/")
+    for url in os.environ.get("OVERPASS_URLS", "").split(",")
+    if url.strip()
+] or list(DEFAULT_OVERPASS_URLS)
 MAX_ROUTE_KM: Final = float(os.environ.get("MAX_ROUTE_KM", 15))  # guard against huge downloads
 
 
@@ -170,13 +210,23 @@ def build_graph(start: Coord, end: Coord) -> nx.MultiDiGraph:
     )
 
 
-    return ox.graph_from_point(
-        (center_lat, center_lng),
-        dist=radius_m,
-        network_type="walk",
-        simplify=True,
-        truncate_by_edge=True,
-    )
+    for url in OVERPASS_URLS:
+        ox.settings.overpass_url = url
+        try:
+            return ox.graph_from_point(
+                (center_lat, center_lng),
+                dist=radius_m,
+                network_type="walk",
+                simplify=True,
+                truncate_by_edge=True,
+            )
+        except (requests.exceptions.RequestException, ResponseStatusCodeError) as exc:
+            log.warning(
+                "Overpass server %s failed (%s: %.200s); trying the next one.",
+                url, type(exc).__name__, exc,
+            )
+
+    raise MapDataUnavailable
 
 
 
@@ -375,8 +425,12 @@ def route():
         route_nodes, coords = find_quiet_route(G, start, end)
     except nx.NetworkXNoPath:
         return jsonify(error="No walkable path found between those points."), 404
-    except ox.errors.InsufficientResponseError:
+    except InsufficientResponseError:
         return jsonify(error="No OpenStreetMap walking data found for that area."), 404
+    except MapDataUnavailable:
+        return jsonify(
+            error="The OpenStreetMap data service can't be reached right now. Please try again in a few minutes."
+        ), 503
     except Exception:
         log.exception("Route computation failed")
         return jsonify(error="Failed to compute route."), 500
