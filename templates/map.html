@@ -58,8 +58,9 @@
                 <p>Navigate through the safest, most peaceful routes in your city</p>
             </div>
         </div>
-        <div class="user-bar">
+           <div class="user-bar">
             <span>Signed in as <strong>{{ username }}</strong></span>
+            <a class="form-link" href="https://docs.google.com/forms/d/e/1FAIpQLSdqIGWS8n3bo6gKqVtMe3MgkZdX9XGFLRD5d7tmBKuVLMvznw/viewform?usp=dialog" target="_blank" rel="noopener noreferrer">Report / Feedback</a>
             <a class="logout-link" href="{{ url_for('logout') }}">Log Out</a>
         </div>
     </div>
@@ -72,7 +73,7 @@
         <button type="submit">Navigate</button>
         <button type="button" onclick="location.reload()">Clear</button>
     </form>
-
+    
     <div id="demo"></div>
     <div id="map"></div>
 </div>
