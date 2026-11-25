@@ -364,3 +364,19 @@
 .logout-link:hover {
     background-color: #e8894a;
 }
+
+.form-link {
+    padding: 8px 18px;
+    background-color: #52b788;
+    color: #2b2d42;
+    border: 2px solid #fdf6ec;
+    border-radius: 8px;
+    text-decoration: none;
+    font-family: 'Fredoka One', cursive;
+    letter-spacing: 0.5px;
+    transition: background-color 0.2s;
+}
+
+.form-link:hover {
+    background-color: #40916c;
+}
